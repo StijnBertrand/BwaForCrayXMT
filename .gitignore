@@ -1,3 +1,6 @@
 *.o
-*/ref
-*/test
+/ref
+/test
+bwa
+libbwa.a
+

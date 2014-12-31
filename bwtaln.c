@@ -82,41 +82,36 @@ int bwt_cal_width(const bwt_t *bwt, int len, const ubyte_t *str, bwt_width_t *wi
 
 void bwa_cal_sa_reg_gap(int tid, bwt_t *const bwt, int n_seqs, bwa_seq_t *seqs, const gap_opt_t *opt)
 {
-	int i, j, max_l = 0;
+	int i, j;
 	for (i = 0; i != n_seqs; ++i) {
 		bwa_seq_t *p = seqs + i;
 #ifdef HAVE_PTHREAD
-		if (i % opt->n_threads != tid) continue;
+ 	if (i % opt->n_threads != tid) continue;
 #endif
 		gap_opt_t local_opt = *opt;
 		gap_stack_t *stack;
 		bwt_width_t *w, *seed_w;
-		
-		//options for this specific read
+
+		// initiate priority stack
+       		
 		if (opt->fnr > 0.0) local_opt.max_diff = bwa_cal_maxdiff(p->len, BWA_AVG_ERR, opt->fnr);
 		if (local_opt.max_diff < local_opt.max_gapo) local_opt.max_gapo = local_opt.max_diff;
-		local_opt.seed_len = opt->seed_len < p->len? opt->seed_len : 0x7fffffff;
+       		stack = gap_init_stack(local_opt.max_diff, local_opt.max_gapo, local_opt.max_gape, &local_opt);
 
-		//the priority stack
-		stack = gap_init_stack(local_opt.max_diff, local_opt.max_gapo, local_opt.max_gape, &local_opt);
-
-		seed_w = (bwt_width_t*)calloc(opt->seed_len+1, sizeof(bwt_width_t));
-		w = 0;
-	
+        	seed_w = (bwt_width_t*)calloc(opt->seed_len+1, sizeof(bwt_width_t));
+		w = (bwt_width_t*)calloc(p->len + 1, sizeof(bwt_width_t));
+		
 		p->sa = 0; p->type = BWA_TYPE_NO_MATCH; p->c1 = p->c2 = 0; p->n_aln = 0; p->aln = 0;
-		if (max_l < p->len) {
-			max_l = p->len;
-			w = (bwt_width_t*)realloc(w, (max_l + 1) * sizeof(bwt_width_t));
-			memset(w, 0, (max_l + 1) * sizeof(bwt_width_t));
-		}
+
 		bwt_cal_width(bwt, p->len, p->seq, w);
+		local_opt.seed_len = opt->seed_len < p->len? opt->seed_len : 0x7fffffff;
 
 		if (p->len > opt->seed_len)
 			bwt_cal_width(bwt, opt->seed_len, p->seq + (p->len - opt->seed_len), seed_w);
+		
 		// core function
 		for (j = 0; j < p->len; ++j) // we need to complement
 			p->seq[j] = p->seq[j] > 3? 4 : 3 - p->seq[j];
-
 
 		p->aln = bwt_match_gap(bwt, p->len, p->seq, w, p->len <= opt->seed_len? 0 : seed_w, &local_opt, &p->n_aln, stack);
 
@@ -124,7 +119,6 @@ void bwa_cal_sa_reg_gap(int tid, bwt_t *const bwt, int n_seqs, bwa_seq_t *seqs, 
 		// clean up the unused data in the record
 		free(p->name); free(p->seq); free(p->rseq); free(p->qual);
 		p->name = 0; p->seq = p->rseq = p->qual = 0;
-		
 
 		free(seed_w); free(w);
 		gap_destroy_stack(stack);
